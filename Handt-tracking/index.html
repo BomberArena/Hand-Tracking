@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Hand Particle Control</title>
+
+  <style>
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+    }
+
+    body{
+      overflow:hidden;
+      background:black;
+      font-family:sans-serif;
+    }
+
+    video,
+    canvas{
+      position:absolute;
+      top:0;
+      left:0;
+      width:100vw;
+      height:100vh;
+      object-fit:cover;
+    }
+
+    video{
+      transform:scaleX(-1);
+    }
+
+    canvas{
+      pointer-events:none;
+    }
+
+    .title{
+      position:absolute;
+      top:20px;
+      left:20px;
+      color:white;
+      z-index:10;
+      font-size:24px;
+      font-weight:bold;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="title">Hand Particle Control ✨</div>
+
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas"></canvas>
+
+  <!-- MediaPipe -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+  <script>
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let handX = canvas.width / 2;
+    let handY = canvas.height / 2;
+
+    // PARTICLES
+    const particles = [];
+
+    class Particle {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.size = Math.random() * 5 + 2;
+        this.speedX = (Math.random() - 0.5) * 4;
+        this.speedY = (Math.random() - 0.5) * 4;
+        this.color = `hsl(${Math.random()*360},100%,70%)`;
+      }
+
+      update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        this.size *= 0.96;
+      }
+
+      draw() {
+        ctx.beginPath();
+        ctx.fillStyle = this.color;
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function createParticles(x, y) {
+      for (let i = 0; i < 8; i++) {
+        particles.push(new Particle(x, y));
+      }
+    }
+
+    function animateParticles() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (let i = 0; i < particles.length; i++) {
+        particles[i].update();
+        particles[i].draw();
+
+        if (particles[i].size < 0.5) {
+          particles.splice(i, 1);
+          i--;
+        }
+      }
+
+      requestAnimationFrame(animateParticles);
+    }
+
+    animateParticles();
+
+    // HAND TRACKING
+    const hands = new Hands({
+      locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+      }
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7
+    });
+
+    hands.onResults(results => {
+
+      if(results.multiHandLandmarks.length > 0){
+
+        const landmarks = results.multiHandLandmarks[0];
+
+        // index finger tip
+        const finger = landmarks[8];
+
+        handX = canvas.width - (finger.x * canvas.width);
+        handY = finger.y * canvas.height;
+
+        createParticles(handX, handY);
+
+        // draw hand lines
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+
+        landmarks.forEach(point => {
+          ctx.beginPath();
+          ctx.arc(
+            canvas.width - (point.x * canvas.width),
+            point.y * canvas.height,
+            5,
+            0,
+            Math.PI * 2
+          );
+          ctx.fillStyle = "white";
+          ctx.fill();
+        });
+      }
+    });
+
+    // CAMERA
+    const camera = new Camera(video, {
+      onFrame: async () => {
+        await hands.send({ image: video });
+      },
+      width: 1280,
+      height: 720
+    });
+
+    camera.start();
+
+  </script>
+
+</body>
+</html>
